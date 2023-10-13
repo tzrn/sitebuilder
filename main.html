@@ -1,0 +1,650 @@
+<!DOCTYPE HTML>
+
+<html data-theme="garden">
+<head>
+	<meta charset="utf-8">
+	<link rel="stylesheet" href="static/styles.css">
+	<style>
+		.striped
+		{
+		background-image: repeating-linear-gradient(45deg,
+		#00ff0000,
+		#00ff0000 10px,
+		#aa880055 11px,
+		#aa880055 10px);
+		border: solid 2px #00000033;
+		border-radius:5px;
+		padding: 20px;
+		}
+	</style>
+</head>
+
+<body class="text-center">
+	<div class="tabs">
+	  <a class="tab tab-lifted tab-active" href="main.html">Html builder</a> 
+	  <a class="tab tab-lifted" href="sql.html">SQL builder</a> 
+	  <a class="tab tab-lifted" href="cheatsheet.html">CheatSheet</a>
+	</div>
+	
+	<div class="flex gap-4 my-8 w-full justify-center">
+	
+	<div class="flex flex-col w-fit striped overflow-auto text-left"> <!-- HTML HIERARHY MENU -->
+		<p>Elements</p>
+		<div id="eltree"></div>
+		<div class="join mt-2 border-2 rounded border-base-300">
+			<select id='adds' class="select w-full max-w-xs">
+			  <option disabled selected>Pick element</option>
+			</select>
+			<button class="btn join-item" onclick="add()">Add</button>
+		</div>
+		<div class="join mt-2 border-2 rounded border-base-300 w-fit">
+			<button class="btn join-item" onclick="move(-1)">move up</button>
+			<button class="btn join-item" onclick="move(1)">move down</button>
+		</div>
+		<button class="btn mt-2" onclick="remove()">remove</button>
+	</div>
+	
+	<div class="mockup-window border bg-base-300 w-2/5 h-fit">  <!-- PREVIEW -->
+		<iframe id="preview" class="w-full h-96  bg-base-200"></iframe>
+	</div>
+
+	<div class="flex flex-col w-1/3 min-w-fit striped max-h-128 h-128 overflow-auto"> <!-- PROPERTIES MENU -->
+		<p>Properties</p>
+		<div class="flex flex-col" id="properties"></div>
+	</div>
+	
+	</div>
+	
+	<div class="flex gap-2 justify-center mx-8">
+	<textarea id="code" class="textarea textarea-primary w-3/4 h-96" placeholder="Whole code"></textarea>
+	<textarea id="elcode" class="textarea textarea-primary w-1/4 h-96" placeholder="Element code"></textarea>
+	</div><br>
+	<button class="btn absolute left-8" onclick="update()">update document</button>
+	<button class="btn absolute right-8" onclick="lupdate()">update element</button>
+
+	<dialog id="messagebox" class="modal">
+	  <div class="modal-box">
+		<h3 class="font-bold text-lg">Message</h3>
+		<p class="py-4" id="msgtext"></p>
+		<div class="modal-action">
+		  <form method="dialog">
+			<button class="btn">Close</button>
+		  </form>
+		</div>
+	  </div>
+	</dialog>
+</body>
+
+<script>
+function $(id){return document.getElementById(id)};
+function msg(text)
+{
+	msgtext.innerHTML=text;
+	messagebox.showModal();
+}
+
+const generic=['margins','colors','paddings','talign','borderw','round','fontsize','sizes']; //generic visible element properties
+var types=[{name:'NONE'},{name:'/DOCTYPE'},{name:'/META'},{name:'/LINK'}, //HTML element types
+		{name:'/INPUT'},
+		{name:'HTML'},{name:'HEAD'},{name:'BODY',atrs:[...generic]}, 
+		{name:'STYLE'},{name:'DIV',atrs:[...generic,'container']},
+		{name:'SCRIPT'},{name:'H1',atrs:[...generic]},{name:'P',atrs:[...generic]},
+		{name:'BUTTON',atrs:[...generic,'btnclr','btntype']},{name:'SCRIPT'},{name:'DIALOG',atrs:[...generic,'container']}];
+
+const props = 
+{
+	//types:
+	// none - 2 selectors
+	// 1    - radio for class
+	// 2    - attribute selector
+	margins:{
+	name:"margins",
+	props:[{name:"margin around",start:"m-"},
+		   {name:"horizontal margin",start:"mx-"},
+		   {name:"vertical margin",start:"my-"},
+		   {name:"margin top",start:"mt-"},
+		   {name:"margin bottom",start:"mb-"},
+		   {name:"margin left",start:"ml-"},
+		   {name:"margin right",start:"mr-"}],
+	values:['0','px','0.5','1','1.5','2','2.5','3','3.5','4','5','6','7','8','9','10','11','12','14','16','20','24','28','32','36','40','44','48','52','56','60','64','72','80','96','auto']
+	},
+	container: //no value
+	{name:"container-type",
+	props:[{start:"flex"},{start:"grid"}],
+	values:['']
+	},
+	btntype:
+	{name:"button type",
+	props:[{name:'',start:""}],
+	values:['btn-outline','glass']
+	},
+	paddings:{name:"paddings",
+	props:[{name:"padding around",start:"p-"},
+		   {name:"horizontal padding",start:"px-"},
+		   {name:"vertical padding",start:"py-"},
+		   {name:"padding top",start:"pt-"},
+		   {name:"padding bottom",start:"pb-"},
+		   {name:"padding left",start:"pl-"},
+		   {name:"padding right",start:"pr-"}],
+	values:['0','px','0.5','1','1.5','2','2.5','3','3.5','4','5','6','7','8','9','10','11','12','14','16','20','24','28','32','36','40','44','48','52','56','60','64','72','80','96']
+	},
+	btnclr:{
+	name:"button color",
+	props:[{name:"color",start:'btn-'}],
+	values:["neutral","primary","secondary","accent","info","success","warning","error","ghost"]
+	},
+	colors:{
+		name:"Colors",
+		props:[{name:"Background",start:'bg-'},
+			   {name:"Border",start:'border-'},
+			   {name:"Text",start:'text-'}],
+		values:["base-100","base-200","base-300","neutral","primary","secondary","accent","info","success","warning","error","ghost",'bg-inherit','current','transparent','black','white','slate-50','slate-100','slate-200','slate-300','slate-400','slate-500','slate-600','slate-700','slate-800','slate-900','slate-950','gray-50','gray-100','gray-200','gray-300','gray-400','gray-500','gray-600','gray-700','gray-800','gray-900','gray-950','zinc-50','zinc-100','zinc-200','zinc-300','zinc-400','zinc-500','zinc-600','zinc-700','zinc-800','zinc-900','zinc-950','neutral-50','neutral-100','neutral-200','neutral-300','neutral-400','neutral-500','neutral-600','neutral-700','neutral-800','neutral-900','neutral-950','stone-50','stone-100','stone-200','stone-300','stone-400','stone-500','stone-600','stone-700','stone-800','stone-900','stone-950','red-50','red-100','red-200','red-300','red-400','red-500','red-600','red-700','red-800','red-900','red-950','orange-50','orange-100','orange-200','orange-300','orange-400','orange-500','orange-600','orange-700','orange-800','orange-900','orange-950','amber-50','amber-100','amber-200','amber-300','amber-400','amber-500','amber-600','amber-700','amber-800','amber-900','amber-950','yellow-50','yellow-100','yellow-200','yellow-300','yellow-400','yellow-500','yellow-600','yellow-700','yellow-800','yellow-900','yellow-950','lime-50','lime-100','lime-200','lime-300','lime-400','lime-500','lime-600','lime-700','lime-800','lime-900','lime-950','green-50','green-100','green-200','green-300','green-400','green-500','green-600','green-700','green-800','green-900','green-950','emerald-50','emerald-100','emerald-200','emerald-300','emerald-400','emerald-500','emerald-600','emerald-700','emerald-800','emerald-900','emerald-950','teal-50','teal-100','teal-200','teal-300','teal-400','teal-500','teal-600','teal-700','teal-800','teal-900','teal-950','cyan-50','cyan-100','cyan-200','cyan-300','cyan-400','cyan-500','cyan-600','cyan-700','cyan-800','cyan-900','cyan-950','sky-50','sky-100','sky-200','sky-300','sky-400','sky-500','sky-600','sky-700','sky-800','sky-900','sky-950','blue-50','blue-100','blue-200','blue-300','blue-400','blue-500','blue-600','blue-700','blue-800','blue-900','blue-950','indigo-50','indigo-100','indigo-200','indigo-300','indigo-400','indigo-500','indigo-600','indigo-700','indigo-800','indigo-900','indigo-950','violet-50','violet-100','violet-200','violet-300','violet-400','violet-500','violet-600','violet-700','violet-800','violet-900','violet-950','purple-50','purple-100','purple-200','purple-300','purple-400','purple-500','purple-600','purple-700','purple-800','purple-900','purple-950','fuchsia-50','fuchsia-100','fuchsia-200','fuchsia-300','fuchsia-400','fuchsia-500','fuchsia-600','fuchsia-700','fuchsia-800','fuchsia-900','fuchsia-950','pink-50','pink-100','pink-200','pink-300','pink-400','pink-500','pink-600','pink-700','pink-800','pink-900','pink-950','rose-50','rose-100','rose-200','rose-300','rose-400','rose-500','rose-600','rose-700','rose-800','rose-900','rose-950']
+	},
+	talign:{
+	name:"Text align",
+	props:[{start:'text-'}],
+	values:['left','center','right','justify','start','end']
+	},
+	borderw:{
+	name:"Border width",
+	props:[{name:"border width",start:'border-'}],
+	values:['0','2','4','8','x-0','x-2','x-4','x-8','x','y-0','y-2','y-4','y-8','y','s-0','s-2','s-4','s-8','s','e-0','e-2','e-4','e-8','e','t-0','t-2','t-4','t-8','t','r-0','r-2','r-4','r-8','r','b-0','b-2','b-4','b-8','b','l-0','l-2','l-4','l-8','l']
+	},
+	round:{
+	name:"Rounded",
+	props:[{name:"rounded",start:'rounded-'}],
+	values:['none','sm','md','lg','xl','2xl','3xl','full','s-none','s-sm','s','s-md','s-lg','s-xl','s-2xl','s-3xl','s-full','e-none','e-sm','e','e-md','e-lg','e-xl','e-2xl','e-3xl','e-full','t-none','t-sm','t','t-md','t-lg','t-xl','t-2xl','t-3xl','t-full','r-none','r-sm','r','r-md','r-lg','r-xl','r-2xl','r-3xl','r-full','b-none','b-sm','b','b-md','b-lg','b-xl','b-2xl','b-3xl','b-full','l-none','l-sm','l','l-md','l-lg','l-xl','l-2xl','l-3xl','l-full','ss-none','ss-sm','ss','ss-md','ss-lg','ss-xl','ss-2xl','ss-3xl','ss-full','se-none','se-sm','se','se-md','se-lg','se-xl','se-2xl','se-3xl','se-full','ee-none','ee-sm','ee','ee-md','ee-lg','ee-xl','ee-2xl','ee-3xl','ee-full','es-none','es-sm','es','es-md','es-lg','es-xl','es-2xl','es-3xl','es-full','tl-none','tl-sm','tl','tl-md','tl-lg','tl-xl','tl-2xl','tl-3xl','tl-full','tr-none','tr-sm','tr','tr-md','tr-lg','tr-xl','tr-2xl','tr-3xl','tr-full','br-none','br-sm','br','br-md','br-lg','br-xl','br-2xl','br-3xl','br-full','bl-none','bl-sm','bl','bl-md','bl-lg','bl-xl','bl-2xl','bl-3xl','bl-full']
+	},
+	fontsize:{
+		name:"Font Size",
+		props:[{start:"text-"}],
+		values:['xs','sm','base','lg','xl','2xl','3xl','4xl','5xl','6xl','7xl','8xl','9xl']
+	},
+	sizes:{
+		name:"Container Size",
+		props:[{name:"width",start:"w-"},{name:"max width",start:"max-w-"},{name:"min width",start:"min-w-"},{name:"height",start:"h-"},{name:"max height",start:"max-h-"},{name:"min height",start:"min-h-"}],
+		values:['0','px','0.5','1','1.5','2','2.5','3','3.5','4','5','6','7','8','9','10','11','12','14','16','20','24','28','32','36','40','44','48','52','56','60','64','72','80','96','auto','1/2','1/3','2/3','1/4','2/4','3/4','1/5','2/5','3/5','4/5','1/6','2/6','3/6','4/6','5/6','1/12','2/12','3/12','4/12','5/12','6/12','7/12','8/12','9/12','10/12','11/12','full','screen','min','max','fit']
+	}
+}
+
+
+const addables=[
+
+{name:"Title",html:"<h1 class='font-bold'>Title</h1>"},
+{name:"Paragraph",html:"<p>Paragraph with some text</p>"},
+{name:"Button",html:"<button class='btn' onclick=''>BUTTON</button>"},
+{name:"Title",html:"<h1 class='font-bold'>Title</h1>"},
+{name:"Collapse",html:`<div class="collapse bg-base-200">
+  <input type="checkbox" /> 
+  <div class="collapse-title text-xl font-medium">
+    Click me to show/hide content
+  </div>
+  <div class="collapse-content"> 
+    <p>hello</p>
+  </div>
+</div>`},
+{name:"Join",html:`<div class="join join-vertical"></div>`},
+{name:"Table",html:`<div class="overflow-x-auto">
+  <table class="table table-xs">
+    <thead>
+      <tr>
+        <th></th> 
+        <th>Name</th> 
+      </tr>
+    </thead> 
+    <tbody>
+      <tr>
+        <th>1</th> 
+        <td>Cy Ganderton</td> 
+      </tr></tbody></table>`},
+{name:"Select",html:`<select class="select select-bordered w-full max-w-xs">
+  <option disabled selected>Who shot first?</option>
+  <option>Han Solo</option>
+  <option>Greedo</option>
+</select>`},
+{name:"Text input",html:`<input type="text" placeholder="Type here" class="input input-bordered w-full max-w-xs" />`},
+{name:"Modal",html:`<dialog class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">Hello!</h3>
+    <p class="py-4">Press ESC key or click the button below to close</p>
+    <div class="modal-action">
+      <form method="dialog">
+        <button class="btn">Close</button>
+      </form>
+    </div>
+  </div>
+</dialog>`}
+];
+
+function typeind(type)
+{
+	for(var i=0;i<types.length;i++)
+		if(types[i].name==type)
+			return i;
+	return -1;
+}
+		   
+var noninner; //amount of elements that dont content innerHTML !!!ITS EITHER ONE ONE ANOTHER
+for(noninner=1;noninner<types.length&&types[noninner].name[0]=='/';noninner++)
+	types[noninner].name=types[noninner].name.slice(1);
+
+var elems=[];
+var curr=undefined; //current selected button
+var elem=undefined; //current selected element
+
+function findclass(prop)
+{
+	const propselector=$(prop+'-prop');
+	const propind=propselector.selectedIndex
+	propel=props[prop];
+	propname=propel.props[propind].start;
+	
+	var selind=-1;
+	const cl = elem.class.value.split(' ');
+	
+	var i=0
+	for(;i<cl.length;i++)
+	if(cl[i].includes(propname))
+	{
+	 selind=propel.values.lastIndexOf(cl[i].slice(propname.length));
+	 if(selind!=-1)break;
+	}
+	
+	return {classid:i,selind:selind};
+}
+
+function hightlightset(prop)
+{
+	var propel=props[prop];
+	const cl = elem.class.value.split(' ');
+	const propcl = [];
+	propel.props.map(p=>propcl.push(p.start));
+	
+	//console.log(propcl,cl);
+	for(var i=0;i<propcl.length;i++)
+	cl.forEach(c=>{if(c.includes(propcl[i]))
+	$(prop+'-prop').children[i].style.backgroundColor='cyan';})
+}
+
+function changeprop(prop)
+{
+	const propind=$(prop+'-prop').selectedIndex;
+	const valind=$(prop+'-val').selectedIndex;
+	
+	const cl = elem.class.value.split(' ');
+	propel=props[prop];
+	var selind=findclass(prop);
+	
+	if(selind!=-1) //remove property if already exists
+		cl.splice(selind.classid,1);
+	
+	if(valind)
+		cl.push(newprop=propel.props[propind].start+propel.values[valind-1]);
+	
+	
+	if(cl.length==1&&cl[0]=='')
+	{
+		for(var i=0;i<elem.atrs.length;i++)
+			if(elem.atrs[i].name=='class'){elem.atrs.splice(i,1);}
+		elem.class={value:''};
+	}
+	else
+	{
+		elem.class.value=cl.join(' ');
+		if(!elem.class.name){elem.class.name='class';elem.atrs.push(elem.class);}
+	}
+	
+	dupdate();
+	$(prop+'-prop').selectedIndex=propind;
+	$(prop+'-val').selectedIndex=valind;
+	hightlightset(prop);
+}
+
+function selectvalue(prop) //select right property value if already set
+{
+	$(prop+'-val').selectedIndex=findclass(prop).selind+1;
+}
+
+function sel(btn)
+{
+	if(curr)curr.style.backgroundColor='';
+	curr=btn;
+	elem=elems[curr.id];
+	curr.style.backgroundColor='#00FF0032';
+	
+	properties.innerHTML='';
+	var proper=elem.type>0?types[elem.type].atrs:[];
+	if(proper)
+	{
+	proper.forEach(prop=>
+	{
+		cprop=props[prop]; //current
+		
+		switch(prop.type)
+		{
+		default:
+		var namesel=`<select onchange="selectvalue('${prop}')" id="${prop}-prop" class="leading-relaxed min-h-0 h-fit select select-primary w-fit ${cprop.props.length>1?'':'hidden'}">`; //property name selector
+		cprop.props.forEach(p=>{namesel+=`<option>${p.name?p.name:p.start}</option>`;});
+		namesel+='</select>';
+		
+		var valsel =`<select onchange="changeprop('${prop}')" id="${prop}-val" class="leading-relaxed min-h-0 h-fit select select-primary w-fit"><option class="bg-green">None</option>`; //value selector
+		cprop.values.forEach(p=>{valsel+=`<option>${p}</option>`;});
+		valsel +='</select>';
+
+		properties.innerHTML+=`<div class="join mt-2 border-2 p-1 gap-1 rounded border-base-300 w-fit">${cprop.name}:${namesel}${valsel}</div>`;
+		break;
+		}
+	});
+	proper.forEach(prop=>
+	{
+		hightlightset(prop);
+		selectvalue(prop);
+	});
+	}
+	
+	elcode.value=unparse([elem]);
+}	
+
+function move(dir)
+{
+	if(curr==undefined){msg('select element');return;}
+if(!elem.parent||elem.id+dir<0||elem.id+dir>elem.parent.innerHTML.length-1){msg('Cannot move anymore');return;}
+	
+	elem.parent.innerHTML[elem.id]=elem.parent.innerHTML[elem.id+dir];
+	elem.parent.innerHTML[elem.id+dir]=elem;
+	dupdate();
+	//sel($(Number(curr.id)+dir));
+}
+
+function remove()
+{
+	if(curr==undefined){msg('select element');return;}
+	if(!elem.parent)data=[]
+	else
+	elem.parent.innerHTML.splice(elem.id,1);
+	dupdate();
+}
+
+addables.forEach(addable=>
+{
+	adds.innerHTML+=`<option>${addable.name}</option>`;
+});
+
+var indexes=Array(addables.length).fill(0);
+function add()
+{
+	if(curr==undefined||elems[curr.id].type<noninner&&elems[curr.id].type!=-1){msg('select suitable element');return;}
+	if(adds.selectedIndex<=0){msg('select element to add');return;}
+	
+	const currind=adds.selectedIndex-1;
+	var addable=addables[currind];
+	var nelem=parseElement({i:0,text:addables[adds.selectedIndex-1].html})[0];
+	
+	nelem.parent=elem;
+	nelem.atrs.push({name:"id",value:adds.selectedOptions[0].value+indexes[currind]++});
+	elem.innerHTML.push(nelem);
+	dupdate();
+}
+
+function skipSpaces(doc)
+{
+	main:
+	while(doc.i<doc.text.length)
+	{
+		switch(doc.text[doc.i])
+		{
+			case ' ':case '\n': case '\t':
+				doc.i++;
+			break;
+				
+			default: break main;
+		}
+	}
+}
+
+function parseElement(doc)
+{
+	var els=[]; //all els in doc
+
+	getelement:
+	while(doc.i<doc.text.length)
+	{
+	skipSpaces(doc);
+	var e={class:{value:''},atrs:[]}; //HTML element
+	
+	if(doc.text[doc.i]=='<')
+	{
+		doc.i++; //skip '<'
+		skipSpaces(doc); //skip spaces
+		if(doc.text[doc.i]=='/') //end of innerHTML
+		{
+			while(doc.i<doc.text.length&&doc.text[doc.i]!='>')doc.i++;
+			doc.i++;
+			return els;
+		}
+		
+		var elname='';
+		var status=1; 
+		// 1 - in the element name  
+		// 2 - inside of element attributes
+		// 3 - inside of innerHTML
+		// 0 - end of element
+		
+		while(status==1) //Get element name,type
+		{
+			switch(doc.text[doc.i])
+			{
+				case '/': // FALLTRHROUGH INTENDED
+					while(doc.text[doc.i]!='>'&&doc.i<doc.text.length)doc.i++;
+				case '>':
+					status=3;break;
+				
+				case ' ':status=2;break;
+				
+				default: elname+=doc.text[doc.i];break;
+			}
+			doc.i++;
+		}
+		e.type=typeind(elname.toUpperCase());
+		if(e.type==-1)e.name=elname.toUpperCase();
+		//e.name=elname.toUpperCase();
+		//console.log(elname.toUpperCase());
+		//!!!UNKNOWN TYPE WARNING
+		
+		var atrs=e.atrs;
+		next:////Get attributs
+		while(status==2)
+		{
+			skipSpaces(doc); //skip spaces
+			switch(doc.text[doc.i]) //check if no more attributes
+			{
+				case '/': // FALLTRHROUGH INTENDED
+					while(doc.text[doc.i]!='>'&&doc.i<doc.text.length)doc.i++;
+				case '>':
+					status=3;
+					doc.i++;
+					continue next;
+				break;
+			}
+			
+			//parseElement({text:"<html data-theme='omega'>",i:0})
+			
+			var atr={name:'',value:''};
+			gname:
+			while(doc.i<doc.text.length) //get attribute name
+			{
+				switch(doc.text[doc.i])
+				{
+					case '>':
+						atrs.push(atr);
+						continue next;
+					break;
+					
+					case ' ':  //!!!NO SPACES BETWEEN NAME AND VALUE ALLOWED
+						skipSpaces(doc);
+						if(doc.text[doc.i]!='=') //element without value like <input checked/>
+						{
+							//console.log("OMEGA");
+							atrs.push(atr);
+							continue next;
+						}
+					case '=':  // FALLTRHROUGH INTENDED
+						break gname;
+						
+					default:
+						atr.name+=doc.text[doc.i++];
+						//console.log(atr.name);
+					break;
+				}
+			}
+
+
+			doc.i++; //skip '='
+			skipSpaces(doc); //skip spaces
+			doc.i++; //skip '"' or "'"
+			
+			while(doc.i<doc.text.length) //get value
+			{
+				switch(doc.text[doc.i])
+				{
+					case '"':case "'": //!!ALWAYS NEED QUOTES <input id=5/> WON'T WORK!!!
+						doc.i++; //skip '"' or "'"
+						atrs.push(atr);
+						if(atr.name=="class")e.class=atr;	 //link???				
+						continue next;
+					break;
+					
+					default:
+						atr.value+=doc.text[doc.i++];
+					break;
+				}
+			}
+		}
+		//e.atrs=atrs;
+	}
+	else
+	{
+		e.type=0; //NONE tag
+		e.innerHTML=[''];
+		while(doc.text[doc.i]!='<'&&doc.i<doc.text.length) //!!!NO ESCAPING TAGS
+			e.innerHTML[0]+=doc.text[doc.i++];
+		e.innerHTML[0]=e.innerHTML[0].trim();
+	}
+	
+	if(e.type>=noninner||e.type==-1) //innerHTML
+	{
+		e.innerHTML=parseElement(doc);
+		els.push(e);
+	}
+	else
+	{
+		els.push(e);
+		continue getelement;
+	}
+	}
+	
+	return els;
+}
+
+function unparse(html,tab='')
+{
+	var text='';
+	
+	html.forEach(el=>
+	{
+		//console.log(el);
+		const t=el.type>=0?types[el.type].name:el.name;
+		if(el.type)
+		{
+			text+=`${tab}<${t}`;
+			el.atrs.forEach(atr=>{
+				text+=` ${atr.name}`;
+				text+=atr.value==''?' ':`='${atr.value}' `;
+			});
+			text+='>\n';
+			if(el.innerHTML)
+				text+=unparse(el.innerHTML,tab+'\t')+`${tab}</${t}>\n`;
+		}
+		else text+=tab+el.innerHTML[0]+'\n';
+	});
+	return text;
+}
+
+
+function filltree(html,tab='',elems=[],parent=undefined,level=0)
+{
+	var inner='';
+	var id=0;
+	html.forEach(el=>
+	{
+		if(!el.type)return;
+		if(parent)el.parent=parent; //for moving
+		el.id=id++;
+		
+		elems.push(el);
+		var t=el.type>=0?types[el.type].name:el.name;
+		el.atrs.forEach(atr=>{if(atr.name=="id")t+=`#${atr.value}`});
+		
+		inner+=`<details ${level<2&&'open'} class="collapse bg-base-200 text-sm p-0"><summary class="collapse-title ${el.type<noninner?'bg-base-300':''} py-0 min-h-0 px-2"><p class="mr-8">${tab+t}</p><button id="${elems.length-1}" onclick="sel(this)" class="btn btn-neutral btn-outline min-h-0 h-min absolute top-0 right-2">✔</button></summary>`;
+		el.btnid=elems.length-1; //for recovering select
+		
+		if(el.innerHTML&&el.innerHTML.length>0)
+		{
+			inner+='<div class="collapse-content !p-0">';
+			const data=filltree(el.innerHTML,tab+' . ',elems,el,level+1);
+			inner+=data.inner;
+			inner+='</div>';
+		}
+		inner+='</details>';
+	});
+	return {inner:inner,elems:elems};
+}
+
+var data=undefined;
+function dupdate() //update from data not from code
+{
+	code.value=unparse(data);
+	localStorage.setItem('code',code.value);
+	treedata=filltree(data);
+	eltree.innerHTML=treedata.inner;
+	elems=treedata.elems;
+	
+	preview.src = "data:text/html;charset=utf-8," + encodeURI(code.value);
+	//iframedoc = preview.contentDocument || preview.contentWindow.document;
+	
+	properties.innerHTML='';
+	if(elem)sel($(elem.btnid));
+}
+
+function update() //update from code
+{
+	data=parseElement({text:code.value,i:0});
+	dupdate();
+}
+
+function lupdate()
+{
+	if(elem) //update from single element code if an element selected
+		elem.parent.innerHTML[elem.id]=parseElement({i:0,text:elcode.value})[0];
+	dupdate();
+}
+
+code.value=localStorage.code?localStorage.code:
+`<HTML>
+	<HEAD>
+		<META charset='utf-8'>
+		<LINK rel='stylesheet' href='http://127.0.0.1:8080/styles.css'>
+	</HEAD>
+	<BODY>
+	</BODY>
+</HTML>`
+
+update();
+</script>
+
+</html>
+
+<!--
+a=document.getElementsByClassName('align-baseline')[0];for(var i=0;i<a.childElementCount;i++)
+    console.log(a.children[i].children[0].innerHTML);
+-->

@@ -1,0 +1,305 @@
+<!DOCTYPE HTML>
+
+<html data-theme="garden">
+<head>
+	<meta charset="utf-8">
+	<link rel="stylesheet" href="static/styles.css">
+	<style>
+		.striped
+		{
+		background-image: repeating-linear-gradient(45deg,
+		#00ff0000,
+		#00ff0000 10px,
+		#aa880055 11px,
+		#aa880055 10px);
+		border: solid 2px #00000033;
+		border-radius:5px;
+		padding: 20px;
+		}
+		::selection
+		{
+			background-color:#ff5588;
+			color:#444444;
+		}
+	</style>
+</head>
+
+<body class="text-center">
+	<div class="tabs m-auto">
+	  <a class="tab tab-lifted" href="main.html">Html builder</a> 
+	  <a class="tab tab-lifted tab-active" href="sql.html">SQL builder</a> 
+	  <a class="tab tab-lifted" href="cheatsheet.html">CheatSheet</a>
+	</div>
+	
+	<div class="flex justify-center w-full items-center">
+		<h1 class="font-bold text-xl">SQL tables</h1>
+		<button onclick="dupdate()" class="mx-8 btn inline-block font-bold btn-accent btn-circle">💾</button>
+	</div>
+	
+	<hr class="my-2">
+	<div class="mx-4">
+		<div id="tablesel" class="grid grid-cols-3 justify-center gap-4"></div>
+		<button onclick="newtable()" class="btn font-bold btn-accent btn-circle mt-4">+</button>
+	</div>
+	
+	<div class="flex  my-2">
+	<div class="flex flex-col gap-2 bg-base-200 max-w-fit mx-auto p-4 rounded-lg"> 			<!--SQL FOR CREATING TABLES-->
+		<h3 class="text-lg font-bold">SQL create tables</h3>
+		<textarea id="sqlcode" class="textarea textarea-primary w-128 h-72 mt-4" placeholder="Sql code"></textarea>
+		<button class="btn btn-outline btn-secondary" onclick="parsecode()">Update tables from code</button>
+	</div>
+	
+	<div class="flex flex-col bg-base-200 max-w-fit mx-auto p-4 rounded-lg"> 			<!--QUERY BUILDER -->
+	  <h3 class="text-lg font-bold">Query builder</h3>
+		<div>
+		Type:<select id="qb" class="select select-bordered select-secondary leading-none max-h-0 h-0"><option>Select</option><option>Insert</option><option>Delete</option></select>
+		<button class="btn btn-outline btn-secondary" onclick="buildquery()">Build!</button>
+		</div>
+		<textarea id="querycode" class="textarea textarea-primary w-128 h-72 mt-4" placeholder="Sql code"></textarea>
+	</div>	
+	</div>
+	
+	<dialog id="my_modal_1" class="modal">
+	  <div class="modal-box">
+		<h3 class="font-bold text-lg">Set foreign key!</h3>
+		<select id="trefsel" onchange="fillreffields()" class="select select-bordered"></select>
+		<select id="frefsel" class="select select-bordered"></select>
+		<div class="modal-action">
+		  <form method="dialog">
+			<button class="btn" onclick="setref()">OK</button>
+		  </form>
+		</div>
+	  </div>
+	</dialog>
+</body>
+
+<script>
+	function $(id){return document.getElementById(id)};
+	const dtypes=['none','integer primary key autoincrement','text','integer','date','reference'];
+	var tables=localStorage.tables?JSON.parse(localStorage.tables):[];
+	
+	var typeselel="";
+	for(var i=0;i<dtypes.length;i++)
+	{
+		typeselel+=`<option>${dtypes[i]}</option>`;
+	};
+	typeselel+='</select>';
+	
+	function removetable(i)
+	{
+		tables.splice(i,1);
+		update();
+	}
+	
+	function fillreffields()
+	{
+		frefsel.innerHTML=0;
+		if($('trefsel').selectedIndex!=-1)
+		tables[$('trefsel').selectedIndex].fields.forEach(field=>
+		frefsel.innerHTML+=`<option>${field.name}</option>`);
+	}
+	
+	function dupdate()
+	{
+		sqlcode.value='';
+		trefsel.innerHTML='';
+		for(var i=0; i<tables.length; i++)
+		{
+			tables[i].name=$(`tn${i}`).value;
+			trefsel.innerHTML+=`<option>${tables[i].name}</option>`;
+			sqlcode.value+=`create table ${tables[i].name}(`;
+			var fields=[];
+			for(var j=0; j<tables[i].fields.length; j++)
+			{
+				tables[i].fields[j].name=$(`fn${i}${j}`).value;
+				tables[i].fields[j].type=$(`ft${i}${j}`).selectedIndex;
+				switch(tables[i].fields[j].type)
+				{
+					case 5:
+					if(tables[i].fields[j].ref)
+						fields.push(`${tables[i].fields[j].name} references ${tables[tables[i].fields[j].ref.table].name}(${tables[tables[i].fields[j].ref.table].fields[tables[i].fields[j].ref.field].name})`);
+					break;
+					default:
+						fields.push(`${tables[i].fields[j].name} ${dtypes[tables[i].fields[j].type]}`);
+				}
+			}
+			sqlcode.value+=fields.join(',')+');\n';
+		}
+		localStorage.tables=JSON.stringify(tables);
+		fillreffields();
+	}
+	
+	var rcurrent=undefined;
+	function openrsel(i,j)
+	{
+		dupdate();
+		rcurrent=tables[i].fields[j];
+		my_modal_1.showModal();
+	}
+	
+	function setref()
+	{
+		rcurrent.ref={};
+		rcurrent.ref.table=trefsel.selectedIndex;
+		rcurrent.ref.field=frefsel.selectedIndex;
+		tables[rcurrent.ref.table].reffedby
+			.push({ffield:{table:rcurrent.tablei,field:tables[rcurrent.tablei].fields.indexOf(rcurrent)},
+				   tfield:{table:rcurrent.ref.table,field:rcurrent.ref.field}});
+		tables[rcurrent.tablei].reffedby
+			.push({tfield:{table:rcurrent.tablei,field:tables[rcurrent.tablei].fields.indexOf(rcurrent)},
+				   ffield:{table:rcurrent.ref.table,field:rcurrent.ref.field}});
+	}
+	
+	var selectedfields=[];
+	function sel(i,j)
+	{
+		for(var k=0;k<selectedfields.length;k++)
+			if(selectedfields[k].table==i&&selectedfields[k].field==j)
+			{
+				selectedfields.splice(k,1);
+				return;
+			}
+		selectedfields.push({table:i,field:j});
+	}
+	
+	function newtable()
+	{
+		dupdate();
+		tables.push({name:"",fields:[{name:"id",type:1}],reffedby:[],refs:[]});
+		update();
+	}
+	
+	function newfield(i)
+	{
+		dupdate();
+		tables[i].fields.push({name:"",type:0,tablei:i});
+		update();
+	}
+	
+	function removefield(i,j)
+	{
+		dupdate();
+		tables[i].fields.splice(j,1);
+		update();
+	}
+	
+	//select name,number from student join gruppa on student.group_id = gruppa.id join school on gruppa.school_id = school.id;
+	function findgen(table,genesis,joins)
+	{
+		if(table==genesis) return 1;
+		var leadstogen=0;
+		for(var i=0;i<tables[table].reffedby.length;i++)
+		{
+			const ref=tables[table].reffedby[i];
+			var has=false;
+			
+			joins.every(r=>{if(ref.tfield.table==r.tfield.table){has=true;return;}}); //every breaks after return, forEach continues
+			
+			if(!has)leadstogen=findgen(ref.ffield.table,genesis,joins);
+			else {leadstogen=1;return 1;}
+			
+			if(!has)joins.push(ref);
+		}
+		return leadstogen;
+	}
+	
+	
+	function buildquery()
+	{
+		querycode.innerHTML="";
+		const type = qb.selectedIndex;
+		if(!selectedfields.length)return;
+		var code="";
+		
+		switch(type)
+		{
+			case 0:
+			var joins = [];
+			const genesis=selectedfields[0].table;
+			
+			var fieldnames=[];
+			selectedfields.forEach(field=>{
+				cfield=tables[field.table].fields[field.field]; //current field (actual obj)
+				fieldnames.push(`"${tables[field.table].name}"."${cfield.name}"`);
+				findgen(field.table,genesis,joins);
+				console.log(joins);
+			});
+			
+			code+=`select ${fieldnames.join(',')} from "${tables[genesis].name}"`;
+			joins.forEach(join=>{
+				code+=` join "${tables[join.tfield.table].name}" on "${tables[join.ffield.table].name}"."${tables[join.ffield.table].fields[join.ffield.field].name}" = "${tables[join.tfield.table].name}"."${tables[join.tfield.table].fields[join.tfield.field].name}"`;
+			});
+			code+=';';
+			
+			break;
+		}
+		querycode.innerHTML=code;
+	}
+	
+	function update()
+	{
+		selectedfields=[];
+		var html="";
+		for(var i=0;i<tables.length;i++) //GENERATE TABLES HTML
+		{
+			html+=`<div class="flex flex-col gap-1 border-2 p-2 rounded-md shadow-lg shadow-slate-800 border-accent w-fit bg-base-200">`;
+			html+=`<input id="tn${i}" type='text' placeholder="table name" class="leading-none max-h-fit h-fit text-center input input-bordered" value="${tables[i].name}">`;
+			for(var j=0;j<tables[i].fields.length;j++)
+			{
+				html+=`<div class="flex gap-1"><input id="fn${i}${j}" class="leading-none max-h-fit h-fit max-w-32 w-32 input input-bordered" value="${tables[i].fields[j].name}">`+
+				`:<select id="ft${i}${j}" class="leading-none select select-bordered py-1 min-h-fit h-fit max-w-32 w-32">`
+				+typeselel+`<button onclick="removefield(${i},${j})" class="btn btn-accent min-h-fit h-fit min-w-fit p-1">❌</button>`+
+				`<button class="btn btn-accent min-h-fit h-fit min-w-fit p-1" onclick="openrsel(${i},${j})">↪</button>`+
+				`<input onchange="sel(${i},${j})" type="checkbox" class="checkbox checkbox-accent"></div>`;
+			}
+			
+			html+=`<button onclick="newfield(${i})" class="btn min-h-fit h-fit p-1 font-bold btn-accent mt-auto">+</button>`;
+			html+=`<button onclick="removetable(${i})" class="btn min-h-fit h-fit p-1 font-bold btn-accent">remove table</button>`;
+			html+=`</div>`;
+		}
+		tablesel.innerHTML=html;
+		
+		for(var i=0;i<tables.length;i++)
+			for(var j=0;j<tables[i].fields.length;j++)
+				$(`ft${i}${j}`).selectedIndex=tables[i].fields[j].type;
+	}
+	
+	function parsecode()
+	{
+		var code=sqlcode.value;
+		
+		function next(){code=code.slice(1)};
+		
+		function skipspaces()
+		{
+			while(true)
+			switch(code[0])
+			{
+				case ' ':case '\t':case '\n':next();break;
+				default:return;
+			}
+		}
+		
+		function getword()
+		{
+			skipspaces();
+			var word="";
+			while(code[0]!=' '&&code[0]!='('){
+				word+=code[0];
+				next();
+			}
+			return word;
+		}
+		
+		skipspaces();
+		code=code.slice(13); //skip create table
+
+		table={name:getword(),fields:[],reffedby:[],refs:[]};
+		
+		console.log(table);
+	}
+	
+	update();
+	dupdate();
+</script>
+</html>
